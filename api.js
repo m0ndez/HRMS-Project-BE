@@ -8,6 +8,9 @@ const multer = require("multer");
 const { v4: uuidv4 } = require("uuid");
 const TokenManager = require("./Services/tokenManager");
 const DecryptData = require("./Services/decryptData");
+const exportUserToExcel = require("./Services/excelWriter");
+const XLSX = require("xlsx");
+const fs = require("fs");
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(cors());
@@ -61,6 +64,8 @@ router.use((requst, response, next) => {
 });
 // -------- Setup Middleware -------- //
 
+
+// -------- API -------- //
 router.route("/login").post((request, response) => {
   const { body } = request;
   ctr.AuthController.getLogin({
@@ -175,7 +180,6 @@ router.route("/user/:id/passowrd").put((request, response) => {
         permission: jwtVerify.permission,
         new_password: decryptPassword,
       };
-      // console.log('prepareData', prepareData)
       ctr.UserController.changeUserPassword(prepareData)
         .then((result) => {
           if (result) {
@@ -390,11 +394,11 @@ router.route("/leavesheet").post((request, response) => {
 
 router.route("/leavesheet").get((request, response) => {
   const jwtVerify = TokenManager.checkAuthentication(request);
-
   const createRequest = {
     ...request.query,
     id: jwtVerify.id,
     permission: jwtVerify.permission,
+    isManager: ["true"].includes(request.query.isManager) ? true : false,
   };
   ctr.LeaveController.getLeavesheet(createRequest)
     .then((result) => {
@@ -446,6 +450,300 @@ router.route("/leavesheet/:id").delete((request, response) => {
       });
     });
 });
+
+router.route("/employee").post((request, response) => {
+  const { body } = request;
+  const jwtVerify = TokenManager.checkAuthentication(request);
+  const createRequest = {
+    ...body,
+    password: DecryptData.passwordDecrypt(body.password),
+  };
+
+  if (["admin"].includes(jwtVerify.permission)) {
+    ctr.EmployeeController.createEmployee(createRequest)
+      .then((result) => {
+        if (result) {
+          return response.json({
+            code: 200,
+            data: { id: result.emp_id },
+            message: `สร้างพนักงาน ${result.emp_id} สำเร็จ`,
+          });
+        } else {
+          return response.status(400).json({
+            code: 400,
+            data: error,
+            message: "การทำรายการไม่ถูกต้อง",
+          });
+        }
+      })
+      .catch((error) => {
+        return response.status(400).json({
+          code: 400,
+          data: error,
+          message: "การทำรายการไม่ถูกต้อง",
+        });
+      });
+  } else {
+    return response.status(400).json({
+      code: 500,
+      data: null,
+      message: "ท่านไม่มีสิทธิในการสร้างพนักงาน",
+    });
+  }
+});
+
+router.route("/employee/:id").put((request, response) => {
+  const { body } = request;
+  const jwtVerify = TokenManager.checkAuthentication(request);
+  if (["admin"].includes(jwtVerify.permission)) {
+    const createRequest = {
+      ...body,
+      password: DecryptData.passwordDecrypt(body.password),
+    };
+
+    ctr.EmployeeController.updateEmployee(createRequest)
+      .then((result) => {
+        if (result) {
+          return response.json({
+            code: 200,
+            data: null,
+            message: `แก้ไขพนักงานรหัส ${request.params.id} เสร็จสมบูรณ์`,
+          });
+        } else {
+          return response.status(400).json({
+            code: 400,
+            data: error,
+            message: "การทำรายการไม่ถูกต้อง",
+          });
+        }
+      })
+      .catch((error) => {
+        return response.status(400).json({
+          code: 400,
+          data: error,
+          message: "การทำรายการไม่ถูกต้อง",
+        });
+      });
+  } else {
+    return response.status(400).json({
+      code: 500,
+      data: null,
+      message: "ท่านไม่มีสิทธิในการแก้ไขพนักงาน",
+    });
+  }
+});
+
+router.route("/employee/state/:id").put((request, response) => {
+  const jwtVerify = TokenManager.checkAuthentication(request);
+  const createRequest = {
+    ...request.body,
+  };
+
+  if (["admin"].includes(jwtVerify.permission)) {
+    ctr.EmployeeController.changeEmployeeState(createRequest)
+      .then((result) => {
+        if (result) {
+          return response.json({
+            code: 200,
+            data: null,
+            message: `เปลี่ยนสถานะของพนักงานรหัส ${request.params.id} เสร็จสมบูรณ์`,
+          });
+        } else {
+          return response.status(400).json({
+            code: 400,
+            data: error,
+            message: "การทำรายการไม่ถูกต้อง",
+          });
+        }
+      })
+      .catch((error) => {
+        return response.status(400).json({
+          code: 400,
+          data: error,
+          message: "การทำรายการไม่ถูกต้อง",
+        });
+      });
+  } else {
+    return response.status(400).json({
+      code: 500,
+      data: null,
+      message: "ท่านไม่มีสิทธิในการแก้ไขพนักงาน",
+    });
+  }
+});
+
+router.route("/employee").get((request, response) => {
+  ctr.EmployeeController.getAllEmployee()
+    .then((result) => {
+      if (result) {
+        return response.json({
+          code: 200,
+          data: result,
+          message: "",
+        });
+      } else {
+        return response.status(400).json({
+          code: 400,
+          data: error,
+          message: "การทำรายการไม่ถูกต้อง",
+        });
+      }
+    })
+    .catch((error) => {
+      response.status(400).json({
+        data: error,
+        code: 400,
+        message: "เกิดข้อผิดพลาด",
+      });
+    });
+});
+
+router.route("/employee/:id").get((request, response) => {
+  ctr.EmployeeController.getDetailEmployee(request.params.id)
+    .then((result) => {
+      if (result) {
+        return response.json({
+          code: 200,
+          data: result,
+          message: "",
+        });
+      } else {
+        return response.status(400).json({
+          code: 400,
+          data: error,
+          message: "การทำรายการไม่ถูกต้อง",
+        });
+      }
+    })
+    .catch((error) => {
+      return response.status(400).json({
+        code: 400,
+        data: error,
+        message: "การทำรายการไม่ถูกต้อง",
+      });
+    });
+});
+
+router.route("/employee/:id").delete((request, response) => {
+  const jwtVerify = TokenManager.checkAuthentication(request);
+  if (["admin"].includes(jwtVerify.permission)) {
+    ctr.EmployeeController.deleteEmployee(request.params.id)
+      .then((result) => {
+        if (result) {
+          return response.json({
+            code: 200,
+            data: null,
+            message: `ทำการลบพนักงานรหัส ${request.params.id} ออกจากระบบ เสร็จสมบูรณ์`,
+          });
+        } else {
+          return response.status(400).json({
+            code: 400,
+            data: error,
+            message: "การทำรายการไม่ถูกต้อง",
+          });
+        }
+      })
+      .catch((error) => {
+        return response.status(400).json({
+          code: 400,
+          data: error,
+          message: "การทำรายการไม่ถูกต้อง",
+        });
+      });
+  } else {
+    return response.status(400).json({
+      code: 500,
+      data: null,
+      message: "ท่านไม่มีสิทธิในการลบพนักงาน",
+    });
+  }
+});
+
+router.route("/leaves").get((request, response) => {
+  const jwtVerify = TokenManager.checkAuthentication(request);
+  if (["admin"].includes(jwtVerify.permission)) {
+  } else {
+    return response.status(400).json({
+      code: 500,
+      data: null,
+      message: "ท่านไม่มีสิทธิในการแก้ไขพนักงาน",
+    });
+  }
+});
+
+router.route("/leaves/approve/:id").put((request, response) => {
+  const jwtVerify = TokenManager.checkAuthentication(request);
+  const createRequest = {
+    ...request.body,
+  };
+  if (["admin"].includes(jwtVerify.permission)) {
+    ctr.LeaveController.updateLeaveStatus(createRequest)
+      .then((result) => {
+        if (result) {
+          return response.json({
+            code: 200,
+            data: null,
+            message: `อนุมัติเอกสาร ${request.params.id} เสร็จสมบูรณ์`,
+          });
+        } else {
+          return response.status(400).json({
+            code: 400,
+            data: error,
+            message: "การทำรายการไม่ถูกต้อง",
+          });
+        }
+      })
+      .catch((error) => {
+        return response.status(400).json({
+          code: 400,
+          data: error,
+          message: "การทำรายการไม่ถูกต้อง",
+        });
+      });
+  } else {
+    return response.status(400).json({
+      code: 500,
+      data: null,
+      message: "ท่านไม่มีสิทธิในการอนุมัติเอกสาร",
+    });
+  }
+});
+
+router.route("/report/employee").get((request, response) => {
+  const jwtVerify = TokenManager.checkAuthentication(request);
+  if (["admin"].includes(jwtVerify.permission)) {
+    ctr.ReportController.getEmployeeReport()
+      .then((result) => {
+        if (result) {
+          return response.json({
+            code: 200,
+            data: result,
+            message: "",
+          });
+        } else {
+          return response.status(400).json({
+            code: 400,
+            data: error,
+            message: "การทำรายการไม่ถูกต้อง",
+          });
+        }
+      })
+      .catch((error) => {
+        response.status(400).json({
+          data: error,
+          code: 400,
+          message: "เกิดข้อผิดพลาด",
+        });
+      });
+  } else {
+    return response.status(400).json({
+      code: 500,
+      data: null,
+      message: "ท่านไม่มีสิทธิในการดูรายงาน",
+    });
+  }
+});
+// -------- API -------- //
 
 const port = process.env.PORT || 5000;
 app.listen(port);

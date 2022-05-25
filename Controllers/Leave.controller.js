@@ -26,14 +26,13 @@ async function createLeavesheet(data) {
 // async function updateLeavesheet(data) {}
 
 async function getLeavesheet(data) {
-  console.log("data", data);
   try {
     let pool = await sql.connect(config);
     let response = await pool
       .request()
       .input("id", sql.NVarChar(20), data.id)
       .input("permission", sql.NVarChar(200), data.permission)
-      .input("is_manager", sql.Bit, data.is_manager)
+      .input("is_manager", sql.Bit, data.isManager)
       .execute("GetAllLeavesheet");
 
     if (response.recordsets.length > 0) {
@@ -65,8 +64,47 @@ async function deleteLeavesheet(id) {
   }
 }
 
+async function getLeaveApprove() {
+  try {
+    let pool = await sql.connect(config);
+    let response = await pool.request().execute("GetLeaveApproveList");
+
+    if (response.recordsets.length > 0) {
+      return response.recordset;
+    } else {
+      return undefined;
+    }
+  } catch (error) {
+    return { ...error };
+  }
+}
+
+async function updateLeaveStatus(data) {
+  try {
+    const { state, id } = data;
+    console.log(state, id);
+    let pool = await sql.connect(config);
+    let response = await pool.query(`
+        UPDATE tb_leave 
+        SET 
+        leave_approved = ${state ? 1 : 0}
+        WHERE leave_id = '${id}'
+          `);
+
+    if (response.rowsAffected[0] !== 0) {
+      return response.rowsAffected;
+    } else {
+      return undefined;
+    }
+  } catch (error) {
+    return { ...error };
+  }
+}
+
 module.exports = {
   createLeavesheet,
   getLeavesheet,
   deleteLeavesheet,
+  getLeaveApprove,
+  updateLeaveStatus,
 };

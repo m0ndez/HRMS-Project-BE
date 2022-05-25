@@ -5,6 +5,7 @@ const IncomeController = require('./Income.controller')
 const UserController = require('./User.controller')
 const TimesheetController = require('./Timesheet.controller')
 const LeaveController = require('./Leave.controller')
+const ReportController = require('./Report.controller')
 module.exports = {
     AuthController,
     EmployeeController,
@@ -12,5 +13,6 @@ module.exports = {
     IncomeController,
     UserController,
     TimesheetController,
-    LeaveController
+    LeaveController,
+    ReportController
 }
